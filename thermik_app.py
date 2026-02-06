@@ -6,12 +6,16 @@ import pandas as pd
 from retry_requests import retry
 import plotly.graph_objects as go
 
-# --- CONFIG ---
+# --- 1. KONFIGURATION & HEADER ---
 st.set_page_config(page_title="Walchensee Thermik", page_icon="🏄‍♂️", layout="centered")
 st.title("🏄‍♂️ Walchensee Thermik-Orakel")
 st.markdown("Live-Vorhersage basierend auf Luftdruckdifferenzen (München-Innsbruck).")
 
-# --- BACKEND ---
+# Status-Meldung für dich zum Debuggen (verschwindet, wenn alles klappt)
+status_placeholder = st.empty()
+status_placeholder.info("⏳ Initialisiere App...")
+
+# --- 2. DATEN-ABRUF (BACKEND) ---
 @st.cache_data(ttl=3600)
 def get_weather_data():
     # Setup API
@@ -19,7 +23,7 @@ def get_weather_data():
     retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
     openmeteo = openmeteo_requests.Client(session = retry_session)
 
-    # Koordinaten
+    # Koordinaten (vereinfacht)
     lat_wal = 47.58
     lon_wal = 11.35
     lat_muc = 48.13
@@ -31,7 +35,7 @@ def get_weather_data():
 
     url = "https://api.open-meteo.com/v1/forecast"
     
-    # Parameter sicher definiert
+    # Parameter
     params = {
         "latitude": [lat_wal, lat_muc, lat_inn, lat_boz],
         "longitude": [lon_wal, lon_muc, lon_inn, lon_boz],
@@ -42,11 +46,11 @@ def get_weather_data():
 
     responses = openmeteo.weather_api(url, params=params)
 
-    # Helper Funktion
+    # Helper Funktion zum Verarbeiten der API-Antwort
     def process(response, prefix):
         hourly = response.Hourly()
         
-        # Zeitachse erstellen
+        # Zeitachse bauen
         start = pd.to_datetime(hourly.Time(), unit = "s", utc = True)
         end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True)
         interval = hourly.Interval()
@@ -76,7 +80,7 @@ def get_weather_data():
     df = df.merge(df_boz[["date", "press_boz"]], on="date")
     return df
 
-# --- LOGIK (Vereinfacht) ---
+# --- 3. BERECHNUNG (LOGIK) ---
 def calculate_thermik_score(row):
     score = 0
     
@@ -102,3 +106,12 @@ def calculate_thermik_score(row):
         score += 15
     
     # 3. Temperatur
+    if temp > 20:
+        score += 10
+    elif temp < 14:
+        score -= 20
+    
+    # 4. Windrichtung
+    if wind_dir > 100:
+        if wind_dir < 260:
+            score
