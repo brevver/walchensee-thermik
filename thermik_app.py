@@ -11,7 +11,7 @@ st.set_page_config(page_title="Walchensee Thermik", page_icon="🏄‍♂️", l
 st.title("🏄‍♂️ Walchensee Thermik-Orakel")
 st.markdown("Live-Vorhersage basierend auf Luftdruckdifferenzen (München-Innsbruck).")
 
-# --- BACKEND ---
+# --- CACHING & BACKEND ---
 @st.cache_data(ttl=3600)
 def get_weather_data():
     cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
@@ -67,7 +67,6 @@ def get_weather_data():
     df = df.merge(df_boz[["date", "press_boz"]], on="date")
     return df
 
-# --- LOGIK ---
 def calculate_thermik_score(row):
     score = 0
     # Delta Nord
@@ -87,6 +86,46 @@ def calculate_thermik_score(row):
     if (row["press_boz"] - row["press_inn"]) > 3.0: return 0
     return max(0, min(100, score))
 
-# --- MAIN ---
-try:
-    with st.spinner('Lade Wetterdaten...'):
+# --- MAIN EXECUTION ---
+# Wir entfernen hier das 'try', um Einrückungsfehler zu vermeiden
+with st.spinner('Lade Wetterdaten...'):
+    df = get_weather_data()
+    
+df["score"] = df.apply(calculate_thermik_score, axis=1)
+df["delta_nord"] = df["press_muc"] - df["press_inn"]
+
+days = df["date"].dt.date.unique()[:3]
+tabs = st.tabs(["Heute", "Morgen", "Übermorgen"])
+
+for i, day in enumerate(days):
+    with tabs[i]:
+        daily_data = df[df["date"].dt.date == day]
+        
+        # Filter Tag
+        mask = (daily_data["date"].dt.hour >= 11) & (daily_data["date"].dt.hour <= 17)
+        daytime_data = daily_data[mask]
+        
+        if daytime_data.empty:
+            st.info("Keine Tagesdaten.")
+            continue
+
+        max_score = daytime_data["score"].max()
+        avg_delta = daytime_data["delta_nord"].mean()
+        max_temp = daytime_data["temp_wal"].max()
+        
+        # Ampel
+        st.markdown("### Prognose")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if max_score >= 70: st.success(f"## ✅ GO!\nScore: {int(max_score)}")
+            elif max_score >= 50: st.warning(f"## ⚠️ JEIN\nScore: {int(max_score)}")
+            else: st.error(f"## 🛑 NOPE\nScore: {int(max_score)}")
+        
+        with c2: st.metric("Delta (MUC-INN)", f"{avg_delta:.1f} hPa")
+        with c3: st.metric("Max Temp", f"{max_temp:.1f} °C")
+        
+        st.divider()
+
+        # Chart
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=daily_data["date"], y=daily_
