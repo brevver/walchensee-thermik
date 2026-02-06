@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 import requests
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 # --- CONFIG ---
 st.set_page_config(page_title="Walchensee Thermik", page_icon="🏄‍♂️", layout="centered")
@@ -117,12 +117,8 @@ try:
     
     status.empty()
     
-    # HIER WAR DER FEHLER - JETZT SICHER:
-    # Wir holen erst alle Datums-Objekte
     all_dates = df["date"].dt.date
-    # Dann machen wir sie einzigartig
     unique_dates = all_dates.unique()
-    # Und nehmen die ersten 3
     days = unique_dates[:3]
 
     tabs = st.tabs(["Heute", "Morgen", "Übermorgen"])
@@ -141,7 +137,6 @@ try:
             avg_d = daytime["delta"].mean()
             max_t = daytime["temp_wal"].max()
             
-            # Ampel
             st.markdown("### Prognose")
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -155,7 +150,6 @@ try:
             
             st.divider()
             
-            # Chart
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=daily["date"], y=daily["score"], mode='lines+markers', name='Score', line=dict(color='#00CC96', width=3)))
             fig.add_trace(go.Scatter(x=daily["date"], y=daily["delta"], mode='lines', name='Druck', line=dict(color='#636EFA', width=2, dash='dot'), yaxis="y2"))
@@ -166,39 +160,31 @@ except Exception as e:
     st.error(f"Fehler bei Vorhersage: {e}")
 
 
-# 2. HISTORIE (180 TAGE)
+# 2. HISTORIE (TOP 3)
 st.markdown("---")
 hist_placeholder = st.empty()
-hist_placeholder.text("⏳ Lade Statistik der letzten 180 Tage (kann dauern)...")
+hist_placeholder.text("⏳ Lade Statistik der letzten 180 Tage...")
 
 try:
     today = date.today()
     end_d = (today - timedelta(days=1)).strftime("%Y-%m-%d")
     start_d = (today - timedelta(days=180)).strftime("%Y-%m-%d")
     
-    # Timeout 45s
     df_hist = fetch_and_merge("https://archive-api.open-meteo.com/v1/archive", start_date=start_d, end_date=end_d, timeout=45)
     
     df_hist["score"] = df_hist.apply(calc_score, axis=1)
     
-    # Filter
     h_hist = df_hist["date"].dt.hour
     daytime_hist = df_hist[(h_hist >= 11) & (h_hist <= 17)]
     
-    # Gute Stunden
     good_hours = daytime_hist[daytime_hist["score"] >= 70]
     
     if not good_hours.empty:
-        # Einzigartige Tage
         unique_days = good_hours["date"].dt.date.unique()
-        
-        # Sortieren & Top 3
-        # Um sicherzugehen: erst in Liste wandeln, dann sortieren
         days_list = list(unique_days)
         days_list.sort(reverse=True)
         top_3 = days_list[:3]
         
-        # Text bauen
         dates_str = [d.strftime('%d.%m.%Y') for d in top_3]
         result_text = ", ".join(dates_str)
         
@@ -207,15 +193,98 @@ try:
         hist_placeholder.info("❄️ Keine perfekten Bedingungen in den letzten 180 Tagen.")
         
 except Exception as e:
-    hist_placeholder.caption(f"Historie konnte nicht geladen werden.")
+    hist_placeholder.caption("Historie konnte nicht geladen werden.")
+
+
+# 3. ANALYSE-TOOL (NEU)
+st.markdown("---")
+with st.expander("🔍 Analyse: Warum fehlt ein Tag?", expanded=False):
+    st.write("Wähle ein Datum, um zu prüfen, warum der Score vielleicht schlecht war:")
+    
+    # Datumsauswahl (Standard: Gestern)
+    check_date = st.date_input("Datum prüfen:", date.today() - timedelta(days=1))
+    
+    if st.button("Tag analysieren"):
+        try:
+            d_str = check_date.strftime("%Y-%m-%d")
+            # Nur diesen einen Tag laden
+            df_check = fetch_and_merge("https://archive-api.open-meteo.com/v1/archive", start_date=d_str, end_date=d_str, timeout=10)
+            
+            # 14 Uhr ist meistens die beste Zeit für Thermik
+            df_check["hour"] = df_check["date"].dt.hour
+            row = df_check[df_check["hour"] == 14].iloc[0] # Nehme 14 Uhr Wert
+            
+            # Manuelle Berechnung für Anzeige
+            p_muc = row["press_muc"]
+            p_inn = row["press_inn"]
+            p_boz = row["press_boz"]
+            cloud = row["cloud_wal"]
+            temp = row["temp_wal"]
+            wd = row["dir_wal"]
+            
+            delta = p_muc - p_inn
+            
+            st.markdown(f"### Werte um 14:00 Uhr am {check_date.strftime('%d.%m.%Y')}")
+            
+            # Score Berechnung simulieren und anzeigen
+            score = 0
+            
+            # 1. Delta
+            if delta > 2.0:
+                st.success(f"✅ Druckdifferenz: {delta:.2f} hPa (+40 Pkt)")
+                score += 40
+            elif delta > 0.5:
+                st.warning(f"⚠️ Druckdifferenz: {delta:.2f} hPa (+20 Pkt) -> Könnte besser sein (>2.0)")
+                score += 20
+            else:
+                st.error(f"❌ Druckdifferenz: {delta:.2f} hPa (0 Pkt)")
+            
+            # 2. Sonne
+            if cloud < 30:
+                st.success(f"✅ Bewölkung: {int(cloud)}% (+30 Pkt)")
+                score += 30
+            elif cloud < 60:
+                st.warning(f"⚠️ Bewölkung: {int(cloud)}% (+15 Pkt) -> Zu viele Wolken (>30%)")
+                score += 15
+            else:
+                st.error(f"❌ Bewölkung: {int(cloud)}% (0 Pkt)")
+                
+            # 3. Temp
+            if temp > 20:
+                st.success(f"✅ Temperatur: {temp:.1f}°C (+10 Pkt)")
+                score += 10
+            elif temp < 14:
+                st.error(f"❌ Temperatur: {temp:.1f}°C (-20 Pkt Abzug!)")
+                score -= 20
+            else:
+                 st.info(f"ℹ️ Temperatur: {temp:.1f}°C (Neutral)")
+
+            # 4. Wind
+            if wd > 100 and wd < 260:
+                st.error(f"❌ Windrichtung: {int(wd)}° (Süd/West) -> -20 Pkt Abzug")
+                score -= 20
+            else:
+                st.success(f"✅ Windrichtung: {int(wd)}° (Kein Abzug)")
+                
+            # 5. Föhn
+            foehn_delta = p_boz - p_inn
+            if foehn_delta > 3.0:
+                 st.error(f"☠️ FÖHN-ALARM: Bozen-Innsbruck Delta ist {foehn_delta:.1f} hPa -> Score wird auf 0 gesetzt!")
+                 score = 0
+            
+            score = max(0, min(100, score))
+            st.metric("Errechneter Score", f"{score}/100")
+            
+            if score < 70:
+                st.caption("Ein Tag muss mind. 70 Punkte haben, um als 'Grün' angezeigt zu werden.")
+                
+        except Exception as e:
+            st.error(f"Fehler bei der Analyse: {e}")
 
 
 # 3. FOOTER
 with st.expander("📸 Live-Webcam", expanded=False):
     components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
-
-with st.expander("ℹ️ Algorithmus", expanded=False):
-    st.markdown("Score: Druck (MUC-INN), Sonne, Temp, Windrichtung.")
 
 with st.expander("⚖️ Rechtliches", expanded=False):
     st.markdown("Hobby-Projekt. Nutzung auf eigene Gefahr.")
