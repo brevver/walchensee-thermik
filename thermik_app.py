@@ -11,11 +11,6 @@ st.set_page_config(page_title="Walchensee Thermik", page_icon="🏄‍♂️", l
 st.title("🏄‍♂️ Walchensee Thermik-Orakel")
 st.markdown("Live-Vorhersage basierend auf Luftdruckdifferenzen (München-Innsbruck).")
 
-# --- WEBCAM ---
-with st.expander("📸 Live-Webcam (Addicted Sports)", expanded=False):
-    st.write("Check den Wind:")
-    components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
-
 # --- BACKEND ---
 @st.cache_data(ttl=3600)
 def get_weather_data():
@@ -146,22 +141,18 @@ try:
                 legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig, use_container_width=True)
 
+# --- WEBCAM ---
+with st.expander("📸 Live-Webcam (Addicted Sports)", expanded=False):
+    st.write("Check den Wind:")
+    components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
+
 except Exception as e:
     st.error(f"Fehler: {e}")
     # --- FOOTER / RECHTLICHES ---
 st.markdown("---")
-with st.expander("⚖️ Impressum & Datenschutz (Wichtig)", expanded=False):
+with st.expander("⚖️ Haftungsausschluss & Datenschutz (Wichtig)", expanded=False):
     st.markdown("""
-    ### Impressum
-    **Angaben gemäß § 5 TMG:**
-    
-    [Dein Vorname] [Dein Nachname]  
-    [Deine Straße] [Hausnummer]  
-    [PLZ] [Ort]  
-    
-    **Kontakt:** E-Mail: [Deine E-Mail-Adresse]  
-    
-    ---
+   
     
     ### Haftungsausschluss (Disclaimer)
     Diese Website ist ein reines Hobby-Projekt. Die Wettervorhersagen basieren auf automatisierten Daten von Open-Meteo und Berechnungen, die fehlerhaft sein können. 
