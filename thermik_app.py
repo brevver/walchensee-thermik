@@ -11,42 +11,49 @@ st.set_page_config(page_title="Walchensee Thermik", page_icon="🏄‍♂️", l
 st.title("🏄‍♂️ Walchensee Thermik-Orakel")
 st.markdown("Live-Vorhersage basierend auf Luftdruckdifferenzen (München-Innsbruck).")
 
-# --- CACHING & BACKEND ---
+# --- BACKEND ---
 @st.cache_data(ttl=3600)
 def get_weather_data():
+    # Setup API
     cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
     retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
     openmeteo = openmeteo_requests.Client(session = retry_session)
 
-    coords = {
-        "Walchensee": {"lat": 47.58, "lon": 11.35},
-        "Muenchen":   {"lat": 48.13, "lon": 11.58},
-        "Innsbruck":  {"lat": 47.26, "lon": 11.40},
-        "Bozen":      {"lat": 46.50, "lon": 11.35}
-    }
+    # Koordinaten
+    lat_wal = 47.58
+    lon_wal = 11.35
+    lat_muc = 48.13
+    lon_muc = 11.58
+    lat_inn = 47.26
+    lon_inn = 11.40
+    lat_boz = 46.50
+    lon_boz = 11.35
 
     url = "https://api.open-meteo.com/v1/forecast"
+    
+    # Parameter sicher definiert
     params = {
-        "latitude": [coords["Walchensee"]["lat"], coords["Muenchen"]["lat"], 
-                     coords["Innsbruck"]["lat"], coords["Bozen"]["lat"]],
-        "longitude": [coords["Walchensee"]["lon"], coords["Muenchen"]["lon"], 
-                      coords["Innsbruck"]["lon"], coords["Bozen"]["lon"]],
-        "hourly": ["temperature_2m", "pressure_msl", "cloud_cover", 
-                   "wind_speed_10m", "wind_direction_10m"],
+        "latitude": [lat_wal, lat_muc, lat_inn, lat_boz],
+        "longitude": [lon_wal, lon_muc, lon_inn, lon_boz],
+        "hourly": ["temperature_2m", "pressure_msl", "cloud_cover", "wind_speed_10m", "wind_direction_10m"],
         "timezone": "Europe/Berlin",
         "forecast_days": 3
     }
 
     responses = openmeteo.weather_api(url, params=params)
 
+    # Helper Funktion
     def process(response, prefix):
         hourly = response.Hourly()
-        data = {"date": pd.date_range(
-            start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
-            end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
-            freq = pd.Timedelta(seconds = hourly.Interval()),
-            inclusive = "left"
-        )}
+        
+        # Zeitachse erstellen
+        start = pd.to_datetime(hourly.Time(), unit = "s", utc = True)
+        end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True)
+        interval = hourly.Interval()
+        
+        time_range = pd.date_range(start=start, end=end, freq=pd.Timedelta(seconds=interval), inclusive="left")
+        
+        data = {"date": time_range}
         data[f"temp_{prefix}"] = hourly.Variables(0).ValuesAsNumpy()
         data[f"press_{prefix}"] = hourly.Variables(1).ValuesAsNumpy()
         data[f"cloud_{prefix}"] = hourly.Variables(2).ValuesAsNumpy()
@@ -57,28 +64,41 @@ def get_weather_data():
         df["date"] = df["date"].dt.tz_convert("Europe/Berlin")
         return df
 
+    # Daten verarbeiten
     df_wal = process(responses[0], "wal")
     df_muc = process(responses[1], "muc")
     df_inn = process(responses[2], "inn")
     df_boz = process(responses[3], "boz")
 
+    # Zusammenfügen
     df = df_wal.merge(df_muc[["date", "press_muc"]], on="date")
     df = df.merge(df_inn[["date", "press_inn"]], on="date")
     df = df.merge(df_boz[["date", "press_boz"]], on="date")
     return df
 
+# --- LOGIK (Vereinfacht) ---
 def calculate_thermik_score(row):
     score = 0
-    # Delta Nord
-    delta_nord = row["press_muc"] - row["press_inn"]
-    if delta_nord > 2.0: score += 40
-    elif delta_nord > 0.5: score += 20
-    # Sonne
-    if row["cloud_wal"] < 30: score += 30
-    elif row["cloud_wal"] < 60: score += 15
-    # Temperatur
-    if row["temp_wal"] > 20: score += 10
-    elif row["temp_wal"] < 14: score -= 20
-    # Windrichtung
-    wd = row["dir_wal"]
-    if (
+    
+    # Werte auslesen
+    p_muc = row["press_muc"]
+    p_inn = row["press_inn"]
+    p_boz = row["press_boz"]
+    cloud = row["cloud_wal"]
+    temp = row["temp_wal"]
+    wind_dir = row["dir_wal"]
+
+    # 1. Delta Nord
+    delta_nord = p_muc - p_inn
+    if delta_nord > 2.0:
+        score += 40
+    elif delta_nord > 0.5:
+        score += 20
+    
+    # 2. Sonne
+    if cloud < 30:
+        score += 30
+    elif cloud < 60:
+        score += 15
+    
+    # 3. Temperatur
