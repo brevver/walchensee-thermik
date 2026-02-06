@@ -98,7 +98,6 @@ try:
     days = df["date"].dt.date.unique()[:3]
     tabs = st.tabs(["Heute", "Morgen", "Übermorgen"])
 
-    # ACHTUNG: Hier war der Fehler. Prüfe diese Zeile nach dem Einfügen:
     for i, day in enumerate(days):
         with tabs[i]:
             daily_data = df[df["date"].dt.date == day]
@@ -124,46 +123,4 @@ try:
                 else: st.error(f"## 🛑 NOPE\nScore: {int(max_score)}")
             
             with c2: st.metric("Delta (MUC-INN)", f"{avg_delta:.1f} hPa")
-            with c3: st.metric("Max Temp", f"{max_temp:.1f} °C")
-            
-            st.divider()
-
-            # Chart
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=daily_data["date"], y=daily_data["score"], 
-                mode='lines+markers', name='Score', line=dict(color='#00CC96', width=3)))
-            fig.add_trace(go.Scatter(x=daily_data["date"], y=daily_data["delta_nord"], 
-                mode='lines', name='Druck', line=dict(color='#636EFA', width=2, dash='dot'), yaxis="y2"))
-            
-            fig.update_layout(height=300, margin=dict(t=30, b=10, l=10, r=10),
-                yaxis=dict(title="Score", range=[0, 105]),
-                yaxis2=dict(title="hPa", overlaying="y", side="right"),
-                legend=dict(orientation="h", y=1.1))
-            st.plotly_chart(fig, use_container_width=True)
-
-# --- WEBCAM ---
-with st.expander("📸 Live-Webcam (Addicted Sports)", expanded=False):
-    st.write("Check den Wind:")
-    components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
-
-except Exception as e:
-    st.error(f"Fehler: {e}")
-    # --- FOOTER / RECHTLICHES ---
-st.markdown("---")
-with st.expander("⚖️ Haftungsausschluss & Datenschutz (Wichtig)", expanded=False):
-    st.markdown("""
-   
-    
-    ### Haftungsausschluss (Disclaimer)
-    Diese Website ist ein reines Hobby-Projekt. Die Wettervorhersagen basieren auf automatisierten Daten von Open-Meteo und Berechnungen, die fehlerhaft sein können. 
-    **Die Nutzung erfolgt auf eigene Gefahr.** Der Betreiber übernimmt keine Haftung für Entscheidungen, die auf Basis dieser Daten getroffen werden (z.B. Wahl der Segelgröße, Gefahrensituationen auf dem Wasser). Bitte prüft immer die realen Bedingungen vor Ort!
-    
-    ---
-    
-    ### Datenschutzhinweise
-    **1. Hosting:** Diese App wird über Streamlit Cloud gehostet. Streamlit erfasst temporär IP-Adressen und technische Daten zur Bereitstellung des Dienstes. Weitere Infos: [Streamlit Privacy Policy](https://streamlit.io/privacy-policy).
-    
-    **2. Externe Inhalte (Webcam):** Zur Anzeige der Live-Bilder ist die Webcam von `addicted-sports.com` eingebunden. Durch das Laden der Bilder wird Ihre IP-Adresse an den Server von Addicted Sports übertragen, ähnlich als würden Sie deren Website direkt besuchen.
-    
-    **3. Wetterdaten:** Die Wetterdaten werden live von der Open-Meteo API abgerufen. Es werden dabei keine personenbezogenen Daten von Ihnen an Open-Meteo gesendet, da die Anfrage über den Server dieser App läuft.
-    """)
+            with c3: st.metric("Max Temp", f"{max_temp:.1f
