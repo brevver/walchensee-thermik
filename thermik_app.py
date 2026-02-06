@@ -90,37 +90,3 @@ def calculate_thermik_score(row):
 # --- MAIN ---
 try:
     with st.spinner('Lade Wetterdaten...'):
-        df = get_weather_data()
-        
-    df["score"] = df.apply(calculate_thermik_score, axis=1)
-    df["delta_nord"] = df["press_muc"] - df["press_inn"]
-
-    days = df["date"].dt.date.unique()[:3]
-    tabs = st.tabs(["Heute", "Morgen", "Übermorgen"])
-
-    for i, day in enumerate(days):
-        with tabs[i]:
-            daily_data = df[df["date"].dt.date == day]
-            
-            # Filter Tag
-            mask = (daily_data["date"].dt.hour >= 11) & (daily_data["date"].dt.hour <= 17)
-            daytime_data = daily_data[mask]
-            
-            if daytime_data.empty:
-                st.info("Keine Tagesdaten.")
-                continue
-
-            max_score = daytime_data["score"].max()
-            avg_delta = daytime_data["delta_nord"].mean()
-            max_temp = daytime_data["temp_wal"].max()
-            
-            # Ampel
-            st.markdown("### Prognose")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                if max_score >= 70: st.success(f"## ✅ GO!\nScore: {int(max_score)}")
-                elif max_score >= 50: st.warning(f"## ⚠️ JEIN\nScore: {int(max_score)}")
-                else: st.error(f"## 🛑 NOPE\nScore: {int(max_score)}")
-            
-            with c2: st.metric("Delta (MUC-INN)", f"{avg_delta:.1f} hPa")
-            with c3: st.metric("Max Temp", f"{max_temp:.1f
