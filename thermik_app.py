@@ -114,4 +114,152 @@ def calculate_thermik_score(row):
     # 4. Windrichtung
     if wind_dir > 100:
         if wind_dir < 260:
-            score
+            score -= 20
+            
+    # 5. Foehn Check
+    delta_foehn = p_boz - p_inn
+    if delta_foehn > 3.0:
+        return 0
+        
+    # Ergebnis begrenzen
+    final_score = max(0, score)
+    final_score = min(100, final_score)
+    
+    return final_score
+
+# --- 4. HAUPTPROGRAMM (MIT FEHLERSUCHE) ---
+
+# Wir definieren eine Funktion für den Hauptteil, damit wir Fehler abfangen können
+def run_app():
+    status_placeholder.info("📡 Lade Wetterdaten von Open-Meteo...")
+    df = get_weather_data()
+    
+    status_placeholder.info("🧮 Berechne Thermik-Wahrscheinlichkeiten...")
+    df["score"] = df.apply(calculate_thermik_score, axis=1)
+    df["delta_nord"] = df["press_muc"] - df["press_inn"]
+
+    # Alles hat geklappt -> Status löschen
+    status_placeholder.empty()
+
+    days = df["date"].dt.date.unique()[:3]
+    tabs = st.tabs(["Heute", "Morgen", "Übermorgen"])
+
+    for i, day in enumerate(days):
+        with tabs[i]:
+            daily_data = df[df["date"].dt.date == day]
+            
+            # Filter Tag (11 bis 17 Uhr)
+            hour = daily_data["date"].dt.hour
+            mask = (hour >= 11) & (hour <= 17)
+            daytime_data = daily_data[mask]
+            
+            if daytime_data.empty:
+                st.info("Keine Tagesdaten.")
+                continue
+
+            max_score = daytime_data["score"].max()
+            avg_delta = daytime_data["delta_nord"].mean()
+            max_temp = daytime_data["temp_wal"].max()
+            
+            # Ampel
+            st.markdown("### Prognose")
+            c1, c2, c3 = st.columns(3)
+            
+            with c1:
+                score_int = int(max_score)
+                if max_score >= 70:
+                    st.success(f"## ✅ GO!\nScore: {score_int}")
+                elif max_score >= 50:
+                    st.warning(f"## ⚠️ JEIN\nScore: {score_int}")
+                else:
+                    st.error(f"## 🛑 NOPE\nScore: {score_int}")
+            
+            with c2:
+                st.metric("Delta (MUC-INN)", f"{avg_delta:.1f} hPa")
+                
+            with c3:
+                st.metric("Max Temp", f"{max_temp:.1f} °C")
+            
+            st.divider()
+
+            # Chart
+            fig = go.Figure()
+            
+            # Linie 1: Score
+            fig.add_trace(go.Scatter(
+                x=daily_data["date"], 
+                y=daily_data["score"], 
+                mode='lines+markers', 
+                name='Score', 
+                line=dict(color='#00CC96', width=3)
+            ))
+            
+            # Linie 2: Druck
+            fig.add_trace(go.Scatter(
+                x=daily_data["date"], 
+                y=daily_data["delta_nord"], 
+                mode='lines', 
+                name='Druck', 
+                line=dict(color='#636EFA', width=2, dash='dot'), 
+                yaxis="y2"
+            ))
+            
+            # Layout
+            fig.update_layout(
+                height=300, 
+                margin=dict(t=30, b=10, l=10, r=10),
+                yaxis=dict(title="Score", range=[0, 105]),
+                yaxis2=dict(title="hPa", overlaying="y", side="right"),
+                legend=dict(orientation="h", y=1.1)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+
+# --- START DER APP ---
+try:
+    run_app()
+except Exception as e:
+    st.error("❌ Es ist ein Fehler aufgetreten!")
+    st.error(f"Details: {e}")
+    st.warning("Tipp: Überprüfe die requirements.txt auf GitHub.")
+
+# --- 5. WEBCAM & INFO (AUSSERHALB DER LOGIK) ---
+st.markdown("---")
+with st.expander("📸 Live-Webcam (Addicted Sports)", expanded=False):
+    st.write("Check den Wind:")
+    components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
+
+with st.expander("ℹ️ So funktioniert die Vorhersage (Algorithmus)", expanded=False):
+    st.markdown("""
+    ### Die Formel für den Walchensee
+    Dieser Algorithmus sucht speziell nach **lokaler Thermik**, die normale Wetterapps oft übersehen.
+    
+    **Der Score (0-100) setzt sich so zusammen:**
+    
+    1. **🌪 Druckdifferenz ("Der Motor"):** Ist der Luftdruck in München höher als in Innsbruck, drückt Luft in die Alpen.
+       * *Ideal:* > 2 hPa Differenz (+40 Punkte).
+       
+    2. **☀️ Sonne & Wolken ("Die Heizung"):**
+       Die Berghänge müssen aufheizen.
+       * *Ideal:* Weniger als 30% Bewölkung (+30 Punkte).
+       
+    3. **🌡 Temperatur ("Die Basis"):**
+       Kalte Luft (< 14°C) entwickelt kaum Thermik.
+       * *Ideal:* > 20°C (+10 Punkte).
+       
+    4. **🚫 Windrichtung ("Der Störfaktor"):**
+       Grundwind aus Süd oder West stört die Thermik-Düse.
+       * *Strafe:* -20 Punkte.
+       
+    5. **⚠️ Föhn-Check ("Der Killer"):**
+       Wenn der Druck in Bozen viel höher ist als in Innsbruck, herrscht Südföhn.
+       * *Folge:* Score ist sofort 0 (Föhn ist böig und keine saubere Thermik).
+    """)
+
+st.markdown("---")
+with st.expander("⚖️ Rechtliches (Impressum & Datenschutz)", expanded=False):
+    st.markdown("""
+    **Haftungsausschluss:** Dies ist ein privates Hobby-Projekt. Nutzung auf eigene Gefahr. Keine Gewähr für die Richtigkeit der Wetterdaten.
+    
+    **Datenschutz:** Durch das Laden der Webcam werden Daten an addicted-sports.com übertragen. Hosting via Streamlit Cloud.
+    """)
