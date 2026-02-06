@@ -128,4 +128,27 @@ for i, day in enumerate(days):
 
         # Chart
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=daily_data["date"], y=daily_
+        fig.add_trace(go.Scatter(x=daily_data["date"], y=daily_data["score"], 
+            mode='lines+markers', name='Score', line=dict(color='#00CC96', width=3)))
+        fig.add_trace(go.Scatter(x=daily_data["date"], y=daily_data["delta_nord"], 
+            mode='lines', name='Druck', line=dict(color='#636EFA', width=2, dash='dot'), yaxis="y2"))
+        
+        fig.update_layout(height=300, margin=dict(t=30, b=10, l=10, r=10),
+            yaxis=dict(title="Score", range=[0, 105]),
+            yaxis2=dict(title="hPa", overlaying="y", side="right"),
+            legend=dict(orientation="h", y=1.1))
+        st.plotly_chart(fig, use_container_width=True)
+
+# --- WEBCAM & FOOTER ---
+st.markdown("---")
+with st.expander("📸 Live-Webcam (Addicted Sports)", expanded=False):
+    st.write("Check den Wind:")
+    components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
+
+st.markdown("---")
+with st.expander("⚖️ Rechtliches (Impressum & Datenschutz)", expanded=False):
+    st.markdown("""
+    **Haftungsausschluss:** Dies ist ein privates Hobby-Projekt. Nutzung auf eigene Gefahr. Keine Gewähr für die Richtigkeit der Wetterdaten.
+    
+    **Datenschutz:** Durch das Laden der Webcam werden Daten an addicted-sports.com übertragen. Hosting via Streamlit Cloud.
+    """)
