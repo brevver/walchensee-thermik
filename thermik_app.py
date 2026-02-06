@@ -257,7 +257,7 @@ with st.expander("ℹ️ So funktioniert die Vorhersage (Algorithmus)", expanded
     """)
 
 st.markdown("---")
-with st.expander("⚖️ Rechtliches (Impressum & Datenschutz)", expanded=False):
+with st.expander("⚖️ Rechtliches (Haftungsausschluss & Datenschutz)", expanded=False):
     st.markdown("""
     **Haftungsausschluss:** Dies ist ein privates Hobby-Projekt. Nutzung auf eigene Gefahr. Keine Gewähr für die Richtigkeit der Wetterdaten.
     
