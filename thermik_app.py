@@ -148,3 +148,31 @@ try:
 
 except Exception as e:
     st.error(f"Fehler: {e}")
+    # --- FOOTER / RECHTLICHES ---
+st.markdown("---")
+with st.expander("⚖️ Impressum & Datenschutz (Wichtig)", expanded=False):
+    st.markdown("""
+    ### Impressum
+    **Angaben gemäß § 5 TMG:**
+    
+    [Dein Vorname] [Dein Nachname]  
+    [Deine Straße] [Hausnummer]  
+    [PLZ] [Ort]  
+    
+    **Kontakt:** E-Mail: [Deine E-Mail-Adresse]  
+    
+    ---
+    
+    ### Haftungsausschluss (Disclaimer)
+    Diese Website ist ein reines Hobby-Projekt. Die Wettervorhersagen basieren auf automatisierten Daten von Open-Meteo und Berechnungen, die fehlerhaft sein können. 
+    **Die Nutzung erfolgt auf eigene Gefahr.** Der Betreiber übernimmt keine Haftung für Entscheidungen, die auf Basis dieser Daten getroffen werden (z.B. Wahl der Segelgröße, Gefahrensituationen auf dem Wasser). Bitte prüft immer die realen Bedingungen vor Ort!
+    
+    ---
+    
+    ### Datenschutzhinweise
+    **1. Hosting:** Diese App wird über Streamlit Cloud gehostet. Streamlit erfasst temporär IP-Adressen und technische Daten zur Bereitstellung des Dienstes. Weitere Infos: [Streamlit Privacy Policy](https://streamlit.io/privacy-policy).
+    
+    **2. Externe Inhalte (Webcam):** Zur Anzeige der Live-Bilder ist die Webcam von `addicted-sports.com` eingebunden. Durch das Laden der Bilder wird Ihre IP-Adresse an den Server von Addicted Sports übertragen, ähnlich als würden Sie deren Website direkt besuchen.
+    
+    **3. Wetterdaten:** Die Wetterdaten werden live von der Open-Meteo API abgerufen. Es werden dabei keine personenbezogenen Daten von Ihnen an Open-Meteo gesendet, da die Anfrage über den Server dieser App läuft.
+    """)
