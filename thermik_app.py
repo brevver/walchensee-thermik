@@ -146,7 +146,7 @@ with st.expander("📸 Live-Webcam (Addicted Sports)", expanded=False):
     components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
 
 st.markdown("---")
-with st.expander("⚖️ Rechtliches (Impressum & Datenschutz)", expanded=False):
+with st.expander("⚖️ Rechtliches (Haftungsausschluss & Datenschutz)", expanded=False):
     st.markdown("""
     **Haftungsausschluss:** Dies ist ein privates Hobby-Projekt. Nutzung auf eigene Gefahr. Keine Gewähr für die Richtigkeit der Wetterdaten.
     
