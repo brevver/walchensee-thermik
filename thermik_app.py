@@ -184,7 +184,7 @@ try:
     # Datum berechnen (bis gestern, 90 Tage zurück)
     today = date.today()
     end_d = (today - timedelta(days=1)).strftime("%Y-%m-%d")
-    start_d = (today - timedelta(days=90)).strftime("%Y-%m-%d")
+    start_d = (today - timedelta(days=180)).strftime("%Y-%m-%d")
     
     # Abruf Archive
     df_hist = fetch_and_merge("https://archive-api.open-meteo.com/v1/archive", start_date=start_d, end_date=end_d)
