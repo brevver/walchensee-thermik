@@ -22,41 +22,38 @@ COORDS = {
     "Bozen":      {"lat": 46.50, "lon": 11.35}
 }
 
-def get_json_data(url, params):
-    """Einfache JSON Abfrage"""
-    r = requests.get(url, params=params, timeout=15)
+def get_json_data(url, params, timeout_val=10):
+    """Einfache JSON Abfrage mit variablem Timeout"""
+    # Timeout verhindert, dass die App ewig hängt
+    r = requests.get(url, params=params, timeout=timeout_val)
     r.raise_for_status()
     return r.json()
 
 def process_single_loc(data_json, prefix):
     """Wandelt JSON Antwort in DataFrame"""
     hourly = data_json.get("hourly", {})
-    
-    # Zeitachse
     times = pd.to_datetime(hourly.get("time", []), utc=True)
-    
     df = pd.DataFrame({"date": times})
     
     # Variablen zuordnen
-    if "temperature_2m" in hourly:
-        df[f"temp_{prefix}"] = hourly["temperature_2m"]
-    if "pressure_msl" in hourly:
-        df[f"press_{prefix}"] = hourly["pressure_msl"]
-    if "cloud_cover" in hourly:
-        df[f"cloud_{prefix}"] = hourly["cloud_cover"]
-    if "wind_speed_10m" in hourly:
-        df[f"wind_{prefix}"] = hourly["wind_speed_10m"]
-    if "wind_direction_10m" in hourly:
-        df[f"dir_{prefix}"] = hourly["wind_direction_10m"]
-        
-    # Zeitzone anpassen
+    mapping = {
+        "temperature_2m": f"temp_{prefix}",
+        "pressure_msl": f"press_{prefix}",
+        "cloud_cover": f"cloud_{prefix}",
+        "wind_speed_10m": f"wind_{prefix}",
+        "wind_direction_10m": f"dir_{prefix}"
+    }
+    
+    for api_name, col_name in mapping.items():
+        if api_name in hourly:
+            df[col_name] = hourly[api_name]
+            
     if not df.empty:
         df["date"] = df["date"].dt.tz_convert("Europe/Berlin")
         
     return df
 
-def fetch_and_merge(base_url, start_date=None, end_date=None, forecast_days=None):
-    # Parameter bauen
+def fetch_and_merge(base_url, start_date=None, end_date=None, forecast_days=None, timeout=10):
     params = {
         "latitude": [COORDS["Walchensee"]["lat"], COORDS["Muenchen"]["lat"], COORDS["Innsbruck"]["lat"], COORDS["Bozen"]["lat"]],
         "longitude": [COORDS["Walchensee"]["lon"], COORDS["Muenchen"]["lon"], COORDS["Innsbruck"]["lon"], COORDS["Bozen"]["lon"]],
@@ -71,7 +68,7 @@ def fetch_and_merge(base_url, start_date=None, end_date=None, forecast_days=None
         params["end_date"] = end_date
         
     # Abfrage
-    resp = get_json_data(base_url, params)
+    resp = get_json_data(base_url, params, timeout)
     
     # Einzeln verarbeiten
     df_wal = process_single_loc(resp[0], "wal")
@@ -88,7 +85,6 @@ def fetch_and_merge(base_url, start_date=None, end_date=None, forecast_days=None
 
 def calc_score(row):
     score = 0
-    # Werte holen (Fallback 0)
     p_muc = row.get("press_muc", 0)
     p_inn = row.get("press_inn", 0)
     p_boz = row.get("press_boz", 0)
@@ -98,13 +94,35 @@ def calc_score(row):
 
     delta = p_muc - p_inn
     
-    # 1. Delta
+    # Algorithmus
     if delta > 2.0: score += 40
     elif delta > 0.5: score += 20
     
-    # 2. Sonne
     if cloud < 30: score += 30
     elif cloud < 60: score += 15
     
-    # 3. Temp
-    if temp > 20: score
+    if temp > 20: score += 10
+    elif temp < 14: score -= 20
+    
+    if wd > 100 and wd < 260: score -= 20
+            
+    if (p_boz - p_inn) > 3.0: return 0 # Föhn
+        
+    return max(0, min(100, score))
+
+# --- MAIN APP ---
+
+# 1. VORHERSAGE (WICHTIG & SCHNELL)
+try:
+    status.info("📡 Lade Wettervorhersage...")
+    
+    # Kurzer Timeout für Vorhersage (10s)
+    df = fetch_and_merge("https://api.open-meteo.com/v1/forecast", forecast_days=3, timeout=10)
+    
+    df["score"] = df.apply(calc_score, axis=1)
+    df["delta"] = df["press_muc"] - df["press_inn"]
+    
+    status.empty() # Aufräumen
+    
+    # --- UI ---
+    days = df["date"].dt.date.
