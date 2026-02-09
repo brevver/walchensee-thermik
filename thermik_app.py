@@ -258,9 +258,9 @@ with st.expander("📸 Live-Webcam", expanded=False):
     components.iframe(cam_url, height=500, scrolling=True)
 
 with st.expander("⚖️ Datenschutz und so", expanded=False):
-    st.markdown("**Haftungsausschluss:** Dies ist ein privates Hobby-Projekt. Nutzung auf eigene Gefahr. Keine Gewähr für die Richtigkeit der Wetterdaten.
+    st.markdown("Haftungsausschluss:** Dies ist ein privates Hobby-Projekt. Nutzung auf eigene Gefahr. Keine Gewähr für die Richtigkeit der Wetterdaten.
     
-    **Datenschutz:** Durch das Laden der Webcam werden Daten an addicted-sports.com übertragen. Hosting via Streamlit Cloud.")
+    Datenschutz: Durch das Laden der Webcam werden Daten an addicted-sports.com übertragen. Hosting via Streamlit Cloud.")
 
 
 
