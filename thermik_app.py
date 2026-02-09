@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 import requests
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 
 # --- CONFIG ---
 st.set_page_config(page_title="Walchensee Thermik", page_icon="🏄‍♂️", layout="centered")
@@ -78,6 +78,7 @@ def fetch_and_merge(base_url, start_date=None, end_date=None, forecast_days=None
     
     return df
 
+# --- NEUER ALGORITHMUS (V2) ---
 def calc_score(row):
     score = 0
     p_muc = row.get("press_muc", 0)
@@ -89,17 +90,32 @@ def calc_score(row):
 
     delta = p_muc - p_inn
     
-    if delta > 2.0: score += 40
-    elif delta > 0.5: score += 20
+    # 1. Delta (Gewichtung erhöht!)
+    # Das ist der wichtigste Motor. Wenn der Druck stimmt, geht fast immer was.
+    if delta > 2.0: score += 50      # War 40
+    elif delta > 1.0: score += 30    # War 20 (bei >0.5)
+    elif delta > 0.5: score += 10
     
+    # 2. Sonne
     if cloud < 30: score += 30
     elif cloud < 60: score += 15
+    elif cloud < 80: score += 5      # Neu: Auch bei Hochnebel/leichter Bewölkung gibt es Chance
     
-    if temp > 20: score += 10
-    elif temp < 14: score -= 20
+    # 3. Temp (Angepasst!)
+    # Kälte ist physikalisch gut für Thermik (Dichtunterschied).
+    # Wir bestrafen nur noch extreme Kälte (< 2°C), weil da keiner surft.
+    # Wir geben keinen Bonus für Wärme, da Wärme allein keine Thermik macht.
+    if temp < 2: score -= 20
     
-    if wd > 100 and wd < 260: score -= 20
+    # 4. Windrichtung
+    # Der API-Wind ist oft der Höhenwind. SW ist schlecht, aber wenn Delta hoch ist,
+    # drückt sich der Walchensee-Wind (NE) oft unten durch.
+    # Strafe nur, wenn Delta schwach ist.
+    if wd > 100 and wd < 260: 
+        if delta < 2.0: # Nur bestrafen, wenn Druckdifferenz nicht stark genug ist
+            score -= 20
             
+    # 5. Foehn (Killer)
     if (p_boz - p_inn) > 3.0: return 0
         
     return max(0, min(100, score))
@@ -117,6 +133,7 @@ try:
     
     status.empty()
     
+    # Tage extrahieren
     all_dates = df["date"].dt.date
     unique_dates = all_dates.unique()
     days = unique_dates[:3]
@@ -137,6 +154,7 @@ try:
             avg_d = daytime["delta"].mean()
             max_t = daytime["temp_wal"].max()
             
+            # Ampel
             st.markdown("### Prognose")
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -196,90 +214,82 @@ except Exception as e:
     hist_placeholder.caption("Historie konnte nicht geladen werden.")
 
 
-# 3. ANALYSE-TOOL (NEU)
+# 3. ANALYSE-TOOL (VERBESSERT)
 st.markdown("---")
 with st.expander("🔍 Analyse: Warum fehlt ein Tag?", expanded=False):
-    st.write("Wähle ein Datum, um zu prüfen, warum der Score vielleicht schlecht war:")
+    st.write("Prüft den maximalen Score des gewählten Tages (zwischen 11-17 Uhr).")
     
-    # Datumsauswahl (Standard: Gestern)
-    check_date = st.date_input("Datum prüfen:", date.today() - timedelta(days=1))
+    check_date = st.date_input("Datum prüfen:", date.today())
     
     if st.button("Tag analysieren"):
         try:
             d_str = check_date.strftime("%Y-%m-%d")
-            # Nur diesen einen Tag laden
             df_check = fetch_and_merge("https://archive-api.open-meteo.com/v1/archive", start_date=d_str, end_date=d_str, timeout=10)
             
-            # 14 Uhr ist meistens die beste Zeit für Thermik
+            # Score für alle Stunden berechnen
+            df_check["score"] = df_check.apply(calc_score, axis=1)
+            
+            # Filter auf Tageszeit
             df_check["hour"] = df_check["date"].dt.hour
-            row = df_check[df_check["hour"] == 14].iloc[0] # Nehme 14 Uhr Wert
+            df_daytime = df_check[(df_check["hour"] >= 11) & (df_check["hour"] <= 17)]
             
-            # Manuelle Berechnung für Anzeige
-            p_muc = row["press_muc"]
-            p_inn = row["press_inn"]
-            p_boz = row["press_boz"]
-            cloud = row["cloud_wal"]
-            temp = row["temp_wal"]
-            wd = row["dir_wal"]
-            
-            delta = p_muc - p_inn
-            
-            st.markdown(f"### Werte um 14:00 Uhr am {check_date.strftime('%d.%m.%Y')}")
-            
-            # Score Berechnung simulieren und anzeigen
-            score = 0
-            
-            # 1. Delta
-            if delta > 2.0:
-                st.success(f"✅ Druckdifferenz: {delta:.2f} hPa (+40 Pkt)")
-                score += 40
-            elif delta > 0.5:
-                st.warning(f"⚠️ Druckdifferenz: {delta:.2f} hPa (+20 Pkt) -> Könnte besser sein (>2.0)")
-                score += 20
+            if df_daytime.empty:
+                st.error("Keine Daten für diesen Zeitraum.")
             else:
-                st.error(f"❌ Druckdifferenz: {delta:.2f} hPa (0 Pkt)")
-            
-            # 2. Sonne
-            if cloud < 30:
-                st.success(f"✅ Bewölkung: {int(cloud)}% (+30 Pkt)")
-                score += 30
-            elif cloud < 60:
-                st.warning(f"⚠️ Bewölkung: {int(cloud)}% (+15 Pkt) -> Zu viele Wolken (>30%)")
-                score += 15
-            else:
-                st.error(f"❌ Bewölkung: {int(cloud)}% (0 Pkt)")
+                # Wir suchen die Stunde mit dem BESTEN Score
+                best_idx = df_daytime["score"].idxmax()
+                row = df_daytime.loc[best_idx]
                 
-            # 3. Temp
-            if temp > 20:
-                st.success(f"✅ Temperatur: {temp:.1f}°C (+10 Pkt)")
-                score += 10
-            elif temp < 14:
-                st.error(f"❌ Temperatur: {temp:.1f}°C (-20 Pkt Abzug!)")
-                score -= 20
-            else:
-                 st.info(f"ℹ️ Temperatur: {temp:.1f}°C (Neutral)")
+                best_hour = row["hour"]
+                final_score = row["score"]
+                
+                # Werte für Anzeige
+                p_muc = row.get("press_muc", 0)
+                p_inn = row.get("press_inn", 0)
+                p_boz = row.get("press_boz", 0)
+                cloud = row.get("cloud_wal", 100)
+                temp = row.get("temp_wal", 0)
+                wd = row.get("dir_wal", 0)
+                delta = p_muc - p_inn
 
-            # 4. Wind
-            if wd > 100 and wd < 260:
-                st.error(f"❌ Windrichtung: {int(wd)}° (Süd/West) -> -20 Pkt Abzug")
-                score -= 20
-            else:
-                st.success(f"✅ Windrichtung: {int(wd)}° (Kein Abzug)")
+                st.markdown(f"### Bester Zeitpunkt: {best_hour}:00 Uhr (Score: {int(final_score)})")
                 
-            # 5. Föhn
-            foehn_delta = p_boz - p_inn
-            if foehn_delta > 3.0:
-                 st.error(f"☠️ FÖHN-ALARM: Bozen-Innsbruck Delta ist {foehn_delta:.1f} hPa -> Score wird auf 0 gesetzt!")
-                 score = 0
-            
-            score = max(0, min(100, score))
-            st.metric("Errechneter Score", f"{score}/100")
-            
-            if score < 70:
-                st.caption("Ein Tag muss mind. 70 Punkte haben, um als 'Grün' angezeigt zu werden.")
+                # DETAILS
+                if delta > 2.0:
+                    st.success(f"✅ Druckdifferenz: {delta:.2f} hPa (+50 Pkt)")
+                elif delta > 1.0:
+                    st.success(f"✅ Druckdifferenz: {delta:.2f} hPa (+30 Pkt)")
+                elif delta > 0.5:
+                    st.warning(f"⚠️ Druckdifferenz: {delta:.2f} hPa (+10 Pkt)")
+                else:
+                    st.error(f"❌ Druckdifferenz: {delta:.2f} hPa (0 Pkt)")
                 
+                if cloud < 30:
+                    st.success(f"✅ Bewölkung: {int(cloud)}% (+30 Pkt)")
+                elif cloud < 60:
+                    st.warning(f"⚠️ Bewölkung: {int(cloud)}% (+15 Pkt)")
+                elif cloud < 80:
+                    st.warning(f"⚠️ Bewölkung: {int(cloud)}% (+5 Pkt)")
+                else:
+                    st.error(f"❌ Bewölkung: {int(cloud)}% (0 Pkt)")
+                    
+                if temp < 2:
+                    st.error(f"❌ Temperatur: {temp:.1f}°C (-20 Pkt zu kalt)")
+                else:
+                    st.info(f"✅ Temperatur: {temp:.1f}°C (Kein Abzug)")
+
+                if wd > 100 and wd < 260:
+                    if delta < 2.0:
+                        st.error(f"❌ Windrichtung: {int(wd)}° (Süd/West) & Druckschwach -> -20 Pkt")
+                    else:
+                        st.success(f"✅ Windrichtung: {int(wd)}° (Ignoriert wegen starkem Delta)")
+                else:
+                    st.success(f"✅ Windrichtung: {int(wd)}° (Gut)")
+                    
+                st.metric("Gesamt Score", f"{int(final_score)}/100")
+
         except Exception as e:
-            st.error(f"Fehler bei der Analyse: {e}")
+            st.error(f"Fehler: {e}")
 
 
 # 3. FOOTER
@@ -287,4 +297,4 @@ with st.expander("📸 Live-Webcam", expanded=False):
     components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
 
 with st.expander("⚖️ Rechtliches", expanded=False):
-    st.markdown("Hobby-Projekt. Nutzung auf eigene Gefahr.")
+    st.markdown("Hobby-Projekt.")
