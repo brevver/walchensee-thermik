@@ -77,7 +77,7 @@ def fetch_and_merge(base_url, start_date=None, end_date=None, forecast_days=None
     
     return df
 
-# --- ALGORITHMUS V4 (TRUST THE DELTA) ---
+# --- ALGORITHMUS V5 (FEINTUNING) ---
 def calc_score(row):
     score = 0
     p_muc = row.get("press_muc", 0)
@@ -89,36 +89,35 @@ def calc_score(row):
 
     delta = p_muc - p_inn
     
-    # 1. Delta (Absolute Priorität)
-    if delta > 2.0: score += 60      # MASSIV PUNKTE
-    elif delta > 1.2: score += 40    
-    elif delta > 0.5: score += 20    
+    # 1. Delta (Der Motor)
+    # > 3.0 ist ein Sturm -> Maximale Punkte
+    if delta > 3.0: score += 60
+    # > 2.0 ist sehr gut -> Viele Punkte
+    elif delta > 2.0: score += 50
+    # > 1.3 ist "Okay", aber braucht Hilfe von Sonne/Wind -> Weniger Punkte als vorher
+    elif delta > 1.3: score += 30
+    elif delta > 0.5: score += 10
     
-    # 2. Sonne (Mit "Egal-Modus")
-    if cloud < 40: 
-        score += 30
-    elif cloud < 75: 
-        score += 15
-    elif delta > 2.0:
-        # Wenn der Druck extrem schiebt, sind Wolken egal!
-        score += 15
+    # 2. Sonne
+    if cloud < 40: score += 30
+    elif cloud < 75: score += 15
+    elif delta > 3.0: score += 15 # Nur bei MONSTER-Druck sind Wolken egal
     
     # 3. Temp
-    # Nur Frost ist schlecht
     if temp < 2: score -= 20
     
-    # 4. Windrichtung
-    # Wenn Modell sagt "Süd/West", aber Delta ist stark (>1.5), 
-    # dann lügt das Modell -> Keine Strafe!
+    # 4. Windrichtung (Korrektur für den 07.02.)
+    # Wenn Wind aus Süd/West (schlecht) kommt:
     if wd > 100 and wd < 260: 
-        if delta < 1.5: 
-            score -= 20 # Nur strafen, wenn kein Druck da ist
+        # IGNORIEREN wir das nur, wenn der Druck extrem ist (> 2.5)
+        if delta < 2.5: 
+            score -= 20 # Strafe! Druck reicht nicht, um den Südwind zu killen.
     
-    # Bonus für Nord/Ost im Modell
+    # Bonus für Nord/Ost
     if wd > 0 and wd < 90:
         score += 10
             
-    # 5. Föhn (Killer)
+    # 5. Föhn
     if (p_boz - p_inn) > 4.0: return 0 
         
     return max(0, min(100, score))
@@ -179,7 +178,7 @@ except Exception as e:
     st.error(f"Fehler bei Vorhersage: {e}")
 
 
-# 2. HISTORIE (TOP 3)
+# 2. HISTORIE
 st.markdown("---")
 hist_placeholder = st.empty()
 hist_placeholder.text("⏳ Lade Statistik der letzten 180 Tage...")
@@ -247,26 +246,20 @@ with st.expander("🔍 Analyse: Warum fehlt ein Tag?", expanded=False):
 
                 st.markdown(f"### Bester Zeitpunkt: {row['hour']}:00 Uhr (Score: {int(final_score)})")
                 
-                # DIAGNOSE ANZEIGEN
-                if delta > 1.5:
-                    st.success(f"✅ Druckdifferenz stark ({delta:.2f} hPa). Ignoriere Modell-Wind!")
+                if delta > 3.0:
+                    st.success(f"✅ Druck: {delta:.2f} hPa (MONSTER! +60)")
+                elif delta > 2.0:
+                    st.success(f"✅ Druck: {delta:.2f} hPa (Stark +50)")
+                elif delta > 1.3:
+                    st.warning(f"⚠️ Druck: {delta:.2f} hPa (Mittel +30)")
                 else:
-                    st.write(f"ℹ️ Druckdifferenz normal ({delta:.2f} hPa).")
-                
-                if wd > 100 and wd < 260:
-                     if delta > 1.5:
-                         st.success(f"✅ Modell meldet {int(wd)}° (Süd/West), wird aber wegen starkem Druck ignoriert.")
-                     else:
-                         st.error(f"❌ Modell meldet {int(wd)}° (Süd/West) und Druck zu schwach -> Abzug.")
+                    st.error(f"❌ Druck: {delta:.2f} hPa (Schwach)")
                 
                 st.metric("Gesamt Score", f"{int(final_score)}/100")
 
         except Exception as e:
             st.error(f"Fehler: {e}")
 
-# 3. FOOTER
+# FOOTER
 with st.expander("📸 Live-Webcam", expanded=False):
-    components.iframe("https://www.addicted-sports.com/webcam/walchensee/urfeld/", height=500, scrolling=True)
-
-with st.expander("⚖️ Rechtliches", expanded=False):
-    st.markdown("Hobby-Projekt.")
+    components.iframe("https://www.
