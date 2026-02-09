@@ -258,4 +258,4 @@ with st.expander("📸 Live-Webcam", expanded=False):
     components.iframe(cam_url, height=500, scrolling=True)
 
 with st.expander("⚖️ Rechtliches", expanded=False):
-    st.markdown("Hobby-Projekt.")
+    st.markdown("Obacht - hier handelt es sich um ein Hobbyprojekt nur für mich selbst. Surfen am Walchensee immer auf eigene Gefahr!")
