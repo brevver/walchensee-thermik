@@ -114,6 +114,42 @@ def calc_score(row):
         
     return max(0, min(100, score))
 
+# --- HELPER: Begründungstext generieren ---
+def get_score_explanation(row):
+    reasons = []
+    p_muc = row.get("press_muc", 0)
+    p_inn = row.get("press_inn", 0)
+    p_boz = row.get("press_boz", 0)
+    cloud = row.get("cloud_wal", 100)
+    temp = row.get("temp_wal", 0)
+    wd = row.get("dir_wal", 0)
+    delta = p_muc - p_inn
+
+    # Delta
+    if delta > 3.0: reasons.append("🌪️ Extrem-Druck (+60)")
+    elif delta > 2.0: reasons.append("💨 Starker Druck (+50)")
+    elif delta > 1.3: reasons.append("🌬️ Guter Druck (+30)")
+    elif delta > 0.5: reasons.append("🍃 Basis-Druck (+10)")
+    else: reasons.append("🚫 Kein Druck (0)")
+
+    # Sonne
+    if cloud < 40: reasons.append("☀️ Sonnig (+30)")
+    elif cloud < 75: reasons.append("⛅ Wolkig (+15)")
+    elif delta > 3.0: reasons.append("☁️ Wolken-Egal-Modus (+15)")
+    else: reasons.append("☁️ Zu viele Wolken (0)")
+
+    # Wind
+    if wd > 0 and wd < 90: reasons.append("🧭 Nord/Ost-Bonus (+10)")
+    elif wd > 100 and wd < 260 and delta < 2.5: reasons.append("⚠️ Süd/West-Abzug (-20)")
+    
+    # Temp
+    if temp < 2: reasons.append("❄️ Zu kalt (-20)")
+
+    # Föhn
+    if (p_boz - p_inn) > 4.0: reasons = ["☠️ FÖHN-ALARM (Score 0)"]
+
+    return " | ".join(reasons)
+
 # --- MAIN APP ---
 
 # 1. VORHERSAGE (Automatisch & Schnell)
@@ -140,9 +176,15 @@ try:
                 st.info("Keine Tagesdaten.")
                 continue
 
-            max_s = daytime["score"].max()
+            # Wir suchen die beste Stunde des Tages
+            best_idx = daytime["score"].idxmax()
+            best_row = daytime.loc[best_idx]
+            
+            max_s = best_row["score"]
             avg_d = daytime["delta"].mean()
             max_t = daytime["temp_wal"].max()
+            explanation = get_score_explanation(best_row)
+            best_hour = best_row["date"].hour
             
             st.markdown("### Prognose")
             c1, c2, c3 = st.columns(3)
@@ -154,6 +196,9 @@ try:
                 
             with c2: st.metric("Delta (MUC-INN)", f"{avg_d:.1f} hPa")
             with c3: st.metric("Max Temp", f"{max_t:.1f} °C")
+            
+            # HIER IST DIE NEUE BEGRÜNDUNG:
+            st.caption(f"ℹ️ Begründung (für {best_hour}:00 Uhr): {explanation}")
             
             st.divider()
             
@@ -263,6 +308,3 @@ with st.expander("⚖️ Datenschutz und so", expanded=False):
     
     **Datenschutz:** Durch das Laden der Webcam werden Daten an addicted-sports.com übertragen. Hosting via Streamlit Cloud.
     """)
-
-
-
